@@ -13,4 +13,4 @@ See config.php
 Run with cron
 -------------
 
-/usr/bin/php -f /home/user/fsmon.php > /dev/null 2>&1 
+0 	3 	* 	* 	* 	/usr/bin/php -f /home/user/fsmon.php > /dev/null 2>&1 

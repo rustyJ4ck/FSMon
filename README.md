@@ -1,9 +1,7 @@
 SETUP
 -----
 
-touch .cache
-chmod 770
-chown user:www 
+touch .cache && chmod 770 .cache && chown user:www .cache
 
 
 Configure

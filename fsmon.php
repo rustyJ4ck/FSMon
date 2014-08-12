@@ -30,12 +30,16 @@ $precache = $cache = array();
 
 console::start();
 
+$first_run = false;
+
 // read cache
 
 $cache_file = $this_dir . '.cache';
 
 if (file_exists($cache_file)) {
     $precache = $cache = unserialize(file_get_contents($cache_file));
+} else {
+    $first_run = true;
 }
 
 // scan 
@@ -113,9 +117,24 @@ if (!empty($result)) {
         $buffer .= $line;
         $buffer .= PHP_EOL;
     }
+    
+    if ($first_run) {
+        $buffer = "[First Run]\n\n" . $buffer;        
+    }
+    
+    // log 
+    
+    if (@$config['log']) {
+        
+        $logs_dir = dirname(__FILE__) . '/logs/' . date('Ym');
+        @mkdir($logs_dir, 0770, 1);
+        
+        file_put_contents($logs_dir . '/' . date('d-H-i') . '.log', $buffer);       
+    }
 
     // mail
-    if (@$config['mail']['enable']) {
+    
+    if (@$config['mail']['enable'] && !$first_run) {
 
         $from = @$config['mail']['from'] ? $config['mail']['from'] : 'root@localhost';
         $to   = @$config['mail']['to'] ? $config['mail']['to'] : 'root@localhost';

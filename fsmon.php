@@ -6,6 +6,8 @@
  * @author j4ck <rustyj4ck@gmail.com>
  * @link https://github.com/rustyJ4ck/FSMon
  */
+ 
+set_time_limit(0); 
 
 $root_dir = $this_dir = dirname(__FILE__) . DIRECTORY_SEPARATOR;
 
@@ -203,7 +205,7 @@ class fs {
         while (false !== ($file = @readdir($dir))) {
             $path = $o_dir . /*DIRECTORY_SEPARATOR .*/
                 $file;
-            if (!is_dir($path) && $file != '..' && $file != '.'
+            if ($file !== '..' && $file !== '.' && !is_dir($path)
                 && (empty($files_preg) || (!empty($files_preg) && preg_match("#{$files_preg}#", $file)))
             ) {
                 $ret [] = $path;
@@ -224,7 +226,7 @@ class fs {
 
         while (false !== ($file = @readdir($dir))) {
             $path = $o_dir /*. DIRECTORY_SEPARATOR*/ . $file;
-            if (is_dir($path) && $file != '..' && $file != '.') {
+            if ($file !== '..' && $file !== '.' && is_dir($path)) {
                 $ret [] = $path;
             }
         }

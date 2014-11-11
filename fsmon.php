@@ -2,7 +2,7 @@
 
 /**
  * File System monitor | FSMon
- * @version 1.0.1
+ * @version 1.0.2
  * @author j4ck <rustyj4ck@gmail.com>
  * @link https://github.com/rustyJ4ck/FSMon
  */
@@ -49,7 +49,7 @@ $result = array();
 $checked_ids = array();
 
 $tree = array();
-fs::build_tree($root_dir, $tree, false, $files_preg);
+fs::build_tree($root_dir, $tree, @$config['ignore_dirs'], $files_preg);
 
 $files = $tree['files'];
 
@@ -215,6 +215,9 @@ class mailer {
  */
 class fs {
 
+    const DS = DIRECTORY_SEPARATOR;
+    const IGNORE_DOT_DIRS = true;
+
     /**
      * Find files
      */
@@ -259,7 +262,7 @@ class fs {
      * Build tree
      *
      * @desc build tree
-     * @param string root
+     * @param string|array root
      * @param array &buffer
      * @param array dir filters
      * @param string file regex filter
@@ -267,24 +270,53 @@ class fs {
      */
     public static function build_tree($root_path, array &$data, $dirs_filter = array(), $files_preg = '.*') {
 
-        if (substr($root_path, -1, 1) != DIRECTORY_SEPARATOR) $root_path .= DIRECTORY_SEPARATOR;
+        if (empty($root_path)) {
+            return;
+        }
 
-        $dirs  = self::scan_dir_for_dirs($root_path);
-        $files = self::scan_dir_for_files($root_path, $files_preg);
+        if (!is_array($root_path)) {
+            $root_path = array($root_path);
+        }
+
+        $dirs = array();
+        $files = array();
 
         if (empty($data)) {
             $data['files'] = array();
             $data['dirs']  = array();
         }
 
-        $data['dirs'][] = $root_path;
-        $data['files']  = array_merge($data['files'], $files);
+        foreach ($root_path as $path) {
+            $_path = $path; //no-slash
 
-        foreach ($dirs as $dir) {
-            // check filters
-            if (empty($dirs_filter) || !in_array(preg_replace('/^.*\/(.*)$/', '\1', $dir), $dirs_filter))
-                self::build_tree($dir, $data, $dirs_filter, $files_preg);
+            if (substr($path, -1, 1) != self::DS) $path .= self::DS;
+
+            console::log("ls %s", $_path);
+
+            $skipper = false;
+
+            if (self::IGNORE_DOT_DIRS) {
+                $exPath = explode(self::DS, $_path);
+                $dirname = array_pop($exPath);
+                $skipper = (substr($dirname, 0, 1) === '.');
+            }
+
+            if (!$skipper && (empty($dirs_filter) || !in_array($_path, $dirs_filter))) {
+                $allDirs = self::scan_dir_for_dirs($path);
+                $dirs  = array_merge($dirs, self::scan_dir_for_dirs($path));
+                $files = array_merge($files, self::scan_dir_for_files($path, $files_preg));
+                $data['dirs'][] = $path;
+                $data['files']  = array_merge($data['files'], $files);
+
+                self::build_tree($allDirs, $data, $dirs_filter, $files_preg);
+            } else {
+                console::log("...skipped %s", $_path);
+            }
         }
+
+
+
+
     }
 
 

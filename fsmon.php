@@ -2,12 +2,12 @@
 
 /**
  * File System monitor | FSMon
- * @version 1.0.2
+ * @version 1.0.3
  * @author j4ck <rustyj4ck@gmail.com>
  * @link https://github.com/rustyJ4ck/FSMon
  */
- 
-set_time_limit(0); 
+
+set_time_limit(0);
 
 $root_dir = $this_dir = dirname(__FILE__) . DIRECTORY_SEPARATOR;
 
@@ -105,11 +105,12 @@ if (!empty($result)) {
 
     foreach ($result as $r) {
 
-        $line = sprintf("[%10s]\t%s\t%s kb\t%s"
-            , $r['result']
-            , $r['file']
-            , @round(filesize($r['file']) / 1024, 1)
-            , @date('d.m.Y H:i', filemtime($r['file']))
+        $line = sprintf(
+            "[%10s]\t%s\t%s kb\t%s",
+            $r['result'],
+            $r['file'],
+            @round(filesize($r['file']) / 1024, 1),
+            @date('d.m.Y H:i', filemtime($r['file']))
         );
 
         console::log($line);
@@ -117,23 +118,23 @@ if (!empty($result)) {
         $buffer .= $line;
         $buffer .= PHP_EOL;
     }
-    
+
     if ($first_run) {
-        $buffer = "[First Run]\n\n" . $buffer;        
+        $buffer = "[First Run]\n\n" . $buffer;
     }
-    
+
     // log 
-    
+
     if (@$config['log']) {
-        
+
         $logs_dir = dirname(__FILE__) . '/logs/' . date('Ym');
         @mkdir($logs_dir, 0770, 1);
-        
-        file_put_contents($logs_dir . '/' . date('d-H-i') . '.log', $buffer);       
+
+        file_put_contents($logs_dir . '/' . date('d-H-i') . '.log', $buffer);
     }
 
     // mail
-    
+
     if (@$config['mail']['enable'] && !$first_run) {
 
         $from = @$config['mail']['from'] ? $config['mail']['from'] : 'root@localhost';
@@ -149,7 +150,10 @@ if (!empty($result)) {
             console::log('Message to %s', $to);
 
             mailer::send(
-                $from, $to, $subject, $buffer
+                $from,
+                $to,
+                $subject,
+                $buffer
             );
         }
     }
@@ -163,7 +167,8 @@ if (!empty($result)) {
 
 file_put_contents(
     $cache_file
-    , serialize($cache)
+    ,
+    serialize($cache)
 );
 
 console::log('Done');
@@ -172,15 +177,18 @@ console::log('Done');
 // Done
 //
 
-class console {
+class console
+{
 
     private static $time;
 
-    static function start() {
+    static function start()
+    {
         self::$time = microtime(1);
     }
 
-    static function log() {
+    static function log()
+    {
         $args   = func_get_args();
         $format = array_shift($args);
         $format = '%.5f| ' . $format;
@@ -189,7 +197,8 @@ class console {
         echo PHP_EOL;
     }
 
-    private static function time() {
+    private static function time()
+    {
         return microtime(1) - self::$time;
     }
 }
@@ -197,13 +206,15 @@ class console {
 /**
  * Mail helper
  */
-class mailer {
+class mailer
+{
 
-    static function send($from, $to, $subject, $message) {
+    static function send($from, $to, $subject, $message)
+    {
 
         $headers = 'From: ' . $from . "\r\n" .
             'Reply-To: ' . $from . "\r\n" .
-			"Content-Type: text/plain; charset=\"utf-8\"\r\n" .
+            "Content-Type: text/plain; charset=\"utf-8\"\r\n" .
             'X-Mailer: PHP/fsmon';
 
         return mail($to, $subject, $message, $headers);
@@ -214,15 +225,17 @@ class mailer {
 /**
  * FileSystem helpers
  */
-class fs {
+class fs
+{
 
-    const DS = DIRECTORY_SEPARATOR;
+    const DS              = DIRECTORY_SEPARATOR;
     const IGNORE_DOT_DIRS = true;
 
     /**
      * Find files
      */
-    public static function scan_dir_for_files($o_dir, $files_preg = '') {
+    public static function scan_dir_for_files($o_dir, $files_preg = '')
+    {
         $ret = array();
         $dir = @opendir($o_dir);
         while (false !== ($file = @readdir($dir))) {
@@ -242,7 +255,8 @@ class fs {
     /**
      * Scan dirs. One level
      */
-    public static function scan_dir_for_dirs($o_dir) {
+    public static function scan_dir_for_dirs($o_dir)
+    {
 
         $ret = array();
         $dir = @opendir($o_dir);
@@ -269,7 +283,8 @@ class fs {
      * @param string file regex filter
      * @return array['files' = [...], 'dirs' = [...]]
      */
-    public static function build_tree($root_path, array &$data, $dirs_filter = array(), $files_preg = '.*') {
+    public static function build_tree($root_path, array &$data, $dirs_filter = array(), $files_preg = '.*')
+    {
 
         if (empty($root_path)) {
             return;
@@ -279,7 +294,7 @@ class fs {
             $root_path = array($root_path);
         }
 
-        $dirs = array();
+        $dirs  = array();
         $files = array();
 
         if (empty($data)) {
@@ -290,22 +305,24 @@ class fs {
         foreach ($root_path as $path) {
             $_path = $path; //no-slash
 
-            if (substr($path, -1, 1) != self::DS) $path .= self::DS;
+            if (substr($path, -1, 1) != self::DS) {
+                $path .= self::DS;
+            }
 
             console::log("ls %s", $_path);
 
             $skipper = false;
 
             if (self::IGNORE_DOT_DIRS) {
-                $exPath = explode(self::DS, $_path);
+                $exPath  = explode(self::DS, $_path);
                 $dirname = array_pop($exPath);
                 $skipper = (substr($dirname, 0, 1) === '.');
             }
 
             if (!$skipper && (empty($dirs_filter) || !in_array($_path, $dirs_filter))) {
-                $allDirs = self::scan_dir_for_dirs($path);
-                $dirs  = array_merge($dirs, self::scan_dir_for_dirs($path));
-                $files = array_merge($files, self::scan_dir_for_files($path, $files_preg));
+                $allDirs        = self::scan_dir_for_dirs($path);
+                $dirs           = array_merge($dirs, self::scan_dir_for_dirs($path));
+                $files          = array_merge($files, self::scan_dir_for_files($path, $files_preg));
                 $data['dirs'][] = $path;
                 $data['files']  = array_merge($data['files'], $files);
 
@@ -316,22 +333,22 @@ class fs {
         }
 
 
-
-
     }
 
 
     /**
      * unique file name
      */
-    public static function file_id($path) {
+    public static function file_id($path)
+    {
         return md5($path);
     }
 
     /**
      * Checksum
      */
-    public static function crc_file($path) {
+    public static function crc_file($path)
+    {
         return sprintf("%u", crc32(file_get_contents($path)));
     }
 }

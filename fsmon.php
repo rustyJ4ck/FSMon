@@ -203,6 +203,7 @@ class mailer {
 
         $headers = 'From: ' . $from . "\r\n" .
             'Reply-To: ' . $from . "\r\n" .
+			"Content-Type: text/plain; charset=\"utf-8\"\r\n" .
             'X-Mailer: PHP/fsmon';
 
         return mail($to, $subject, $message, $headers);

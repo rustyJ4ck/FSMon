@@ -2,18 +2,20 @@
 
 /**
  * File System monitor | FSMon
- * @version 1.0.3
+ * @version 1.0.4
  * @author j4ck <rustyj4ck@gmail.com>
  * @link https://github.com/rustyJ4ck/FSMon
  */
 
 set_time_limit(0);
+error_reporting(E_ALL);
+ini_set('display_errors','on');
 
 $root_dir = $this_dir = dirname(__FILE__) . DIRECTORY_SEPARATOR;
 
 // read config
 
-$config = @include($this_dir . 'config.php');
+$config = include($this_dir . 'config.php');
 
 if (isset($config['root'])) {
     $root_dir = $config['root'];
@@ -48,23 +50,21 @@ $result = array();
 
 $checked_ids = array();
 
-$tree = array();
-fs::build_tree($root_dir, $tree, @$config['ignore_dirs'], $files_preg);
+$tree = fsTree::tree($root_dir, $config['ignore_dirs'], $files_preg);
 
-$files = $tree['files'];
+console::log("[1] list files");
 
-foreach ($files as $f) {
+foreach ($tree->getFilesIterator() as $f) {
 
     console::log("...%s", $f);
 
-    $id = fs::file_id($f);
+    $id = fsTree::fileId($f);
 
     $checked_ids [] = $id;
+    $csumm = fsTree::crcFile($f);
 
     if (isset($cache[$id])) {
-        // present
-
-        $csumm = fs::crc_file($f);
+        // existed
         if ($cache[$id]['crc'] != $csumm) {
             // modded
             $cache[$id]['crc']  = $csumm;
@@ -74,8 +74,7 @@ foreach ($files as $f) {
             // old one
         }
     } else {
-        // new
-        $csumm              = fs::crc_file($f);
+        // new one      
         $cache[$id]['crc']  = $csumm;
         $cache[$id]['file'] = $f;
         $result[]           = array('file' => $f, 'result' => 'new');
@@ -83,9 +82,11 @@ foreach ($files as $f) {
 
 }
 
-// check for deleted files
+unset($tree);
 
-$deleted = !empty($precache) ? array_diff(array_keys($precache), $checked_ids) : false;
+console::log("[2] check for deleted files");
+
+$deleted = !empty($precache) ? my_array_diff(array_keys($precache), $checked_ids) : false;
 
 if (!empty($deleted)) {
     foreach ($deleted as $id) {
@@ -94,9 +95,7 @@ if (!empty($deleted)) {
     }
 }
 
-//
-// Changes detected
-//
+console::log("[3] result checks");
 
 if (!empty($result)) {
     $buffer = '';
@@ -105,12 +104,11 @@ if (!empty($result)) {
 
     foreach ($result as $r) {
 
-        $line = sprintf(
-            "[%10s]\t%s\t%s kb\t%s",
-            $r['result'],
-            $r['file'],
-            @round(filesize($r['file']) / 1024, 1),
-            @date('d.m.Y H:i', filemtime($r['file']))
+        $line = sprintf("[%10s]\t%s\t%s kb\t%s"
+            , $r['result']
+            , $r['file']
+            , @round(filesize($r['file']) / 1024, 1)
+            , @date('d.m.Y H:i', filemtime($r['file']))
         );
 
         console::log($line);
@@ -150,10 +148,7 @@ if (!empty($result)) {
             console::log('Message to %s', $to);
 
             mailer::send(
-                $from,
-                $to,
-                $subject,
-                $buffer
+                $from, $to, $subject, $buffer
             );
         }
     }
@@ -167,28 +162,33 @@ if (!empty($result)) {
 
 file_put_contents(
     $cache_file
-    ,
-    serialize($cache)
+    , serialize($cache)
 );
 
 console::log('Done');
+console::log('Memory [All/Curr] %.2f %.2f', memory_get_peak_usage(), memory_get_usage());
 
 //
 // Done
 //
 
-class console
-{
+function my_array_diff(&$a, &$b) {
+    $map = $out = array();
+    foreach($a as $val) $map[$val] = 1;
+    foreach($b as $val) if(isset($map[$val])) $map[$val] = 0;
+    foreach($map as $val => $ok) if($ok) $out[] = $val;
+    return $out;
+}
+
+class console {
 
     private static $time;
 
-    static function start()
-    {
+    static function start() {
         self::$time = microtime(1);
     }
 
-    static function log()
-    {
+    static function log() {
         $args   = func_get_args();
         $format = array_shift($args);
         $format = '%.5f| ' . $format;
@@ -197,8 +197,7 @@ class console
         echo PHP_EOL;
     }
 
-    private static function time()
-    {
+    private static function time() {
         return microtime(1) - self::$time;
     }
 }
@@ -206,11 +205,9 @@ class console
 /**
  * Mail helper
  */
-class mailer
-{
+class mailer {
 
-    static function send($from, $to, $subject, $message)
-    {
+    static function send($from, $to, $subject, $message) {
 
         $headers = 'From: ' . $from . "\r\n" .
             'Reply-To: ' . $from . "\r\n" .
@@ -225,29 +222,33 @@ class mailer
 /**
  * FileSystem helpers
  */
-class fs
-{
+class fsTree {
 
-    const DS              = DIRECTORY_SEPARATOR;
+    const DS = DIRECTORY_SEPARATOR;
     const IGNORE_DOT_DIRS = true;
 
     /**
      * Find files
      */
-    public static function scan_dir_for_files($o_dir, $files_preg = '')
-    {
+    static function lsFiles($o_dir, $files_preg = '') {
         $ret = array();
         $dir = @opendir($o_dir);
-        while (false !== ($file = @readdir($dir))) {
+
+        if (!$dir) {
+            return false;
+        }
+
+        while (false !== ($file = readdir($dir))) {
             $path = $o_dir . /*DIRECTORY_SEPARATOR .*/
                 $file;
             if ($file !== '..' && $file !== '.' && !is_dir($path)
                 && (empty($files_preg) || (!empty($files_preg) && preg_match("#{$files_preg}#", $file)))
             ) {
-                $ret [] = $path;
+                $ret []= $path;
             }
         }
-        @closedir($dir);
+
+        closedir($dir);
 
         return $ret;
     }
@@ -255,22 +256,36 @@ class fs
     /**
      * Scan dirs. One level
      */
-    public static function scan_dir_for_dirs($o_dir)
-    {
+    static function lsDirs($o_dir) {
 
         $ret = array();
         $dir = @opendir($o_dir);
 
-        while (false !== ($file = @readdir($dir))) {
+        if (!$dir) {
+            return false;
+        }
+
+        while (false !== ($file = readdir($dir))) {
             $path = $o_dir /*. DIRECTORY_SEPARATOR*/ . $file;
             if ($file !== '..' && $file !== '.' && is_dir($path)) {
                 $ret [] = $path;
             }
         }
 
-        @closedir($dir);
+        closedir($dir);
 
         return $ret;
+    }
+
+    private $_files = array();
+    private $_dirs  = array();
+
+    function getFilesIterator() {
+        return new ArrayIterator($this->_files);
+    }
+
+    function getDirsIterator() {
+        return new ArrayIterator($this->_dirs);
     }
 
     /**
@@ -281,11 +296,18 @@ class fs
      * @param array &buffer
      * @param array dir filters
      * @param string file regex filter
-     * @return array['files' = [...], 'dirs' = [...]]
+     * @return fsTree
      */
-    public static function build_tree($root_path, array &$data, $dirs_filter = array(), $files_preg = '.*')
-    {
 
+    public static function tree($root_path, $dirs_filter = array(), $files_preg = '.*')
+    {
+        $self = new self;
+        $self->buildTree($root_path, $dirs_filter, $files_preg);
+        return $self;
+    }
+
+    public function buildTree($root_path, $dirs_filter = array(), $files_preg = '.*')
+    {
         if (empty($root_path)) {
             return;
         }
@@ -294,61 +316,61 @@ class fs
             $root_path = array($root_path);
         }
 
-        $dirs  = array();
-        $files = array();
-
-        if (empty($data)) {
-            $data['files'] = array();
-            $data['dirs']  = array();
-        }
-
         foreach ($root_path as $path) {
+
             $_path = $path; //no-slash
 
-            if (substr($path, -1, 1) != self::DS) {
-                $path .= self::DS;
-            }
+            if (substr($path, -1, 1) != self::DS) $path .= self::DS;
 
-            console::log("ls %s", $_path);
+            console::log("ls %s ", $_path);
 
             $skipper = false;
 
             if (self::IGNORE_DOT_DIRS) {
-                $exPath  = explode(self::DS, $_path);
+                $exPath = explode(self::DS, $_path);
                 $dirname = array_pop($exPath);
                 $skipper = (substr($dirname, 0, 1) === '.');
             }
 
             if (!$skipper && (empty($dirs_filter) || !in_array($_path, $dirs_filter))) {
-                $allDirs        = self::scan_dir_for_dirs($path);
-                $dirs           = array_merge($dirs, self::scan_dir_for_dirs($path));
-                $files          = array_merge($files, self::scan_dir_for_files($path, $files_preg));
-                $data['dirs'][] = $path;
-                $data['files']  = array_merge($data['files'], $files);
 
-                self::build_tree($allDirs, $data, $dirs_filter, $files_preg);
+                $dirs = self::lsDirs($path);
+
+                if ($dirs === false) {
+                    //opendir(/var/www/html/...): failed to open dir: Permission denied
+                    console::log('..opendir failed!');
+                } else {
+
+                    $files = self::lsFiles($path, $files_preg);
+
+                    $this->_dirs []= $path;
+                    $this->_files = array_merge($this->_files, $files);
+
+                    $this->buildTree($dirs, $dirs_filter, $files_preg);
+
+                }
+
             } else {
                 console::log("...skipped %s", $_path);
             }
         }
 
 
-    }
 
+
+    }
 
     /**
      * unique file name
      */
-    public static function file_id($path)
-    {
+    public static function fileId($path) {
         return md5($path);
     }
 
     /**
      * Checksum
      */
-    public static function crc_file($path)
-    {
+    public static function crcFile($path) {
         return sprintf("%u", crc32(file_get_contents($path)));
     }
 }
